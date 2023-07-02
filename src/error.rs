@@ -9,9 +9,15 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
-    #[error("Bid is Closed")]
-    BidIsClosed {},
+    #[error("Bid already Closed")]
+    BidAlreadyClosed {},
+
+    #[error("Bid is opening")]
+    BidIsOpening {},
 
     #[error("Bid too low {bid}")]
     BidTooLow { bid: u64 },
+
+    #[error("No bidder")]
+    NoBidder {},
 }
