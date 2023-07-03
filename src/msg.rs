@@ -6,12 +6,17 @@ use crate::state::Bid;
 #[cw_serde]
 pub struct InstantiateMsg {
     pub name: String,
-    pub tick: u64,
+    pub tick: u128,
+    pub commission: u128,
 }
 
 impl InstantiateMsg {
-    pub fn new(name: String, tick: u64) -> Self {
-        Self { name, tick }
+    pub fn new(name: String, tick: u128, commission: u128) -> Self {
+        Self {
+            name,
+            tick,
+            commission,
+        }
     }
 }
 
@@ -26,7 +31,7 @@ pub enum ExecuteMsg {
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     #[returns(TotalBidResp)]
-    TotalBid {},
+    TotalBid { addr: String },
     #[returns(HighestOfBidResp)]
     HighestOfBid {},
     #[returns(WinnerResp)]

@@ -1,6 +1,6 @@
 use cosmwasm_std::{coin, Coin};
 
-use crate::ContractError;
+use crate::{ContractError, ATOM_DENOM};
 
 pub fn collect_coins(coins: &[Coin], denom: &str) -> Result<Coin, ContractError> {
     validiate_denom(coins, denom)?;
@@ -32,4 +32,12 @@ pub fn validiate_denom(coins: &[Coin], denom: &str) -> Result<(), ContractError>
     }
 
     Ok(())
+}
+
+pub fn ten_atom() -> Coin {
+    Coin::new(10, ATOM_DENOM)
+}
+
+pub fn zero_atom() -> Coin {
+    Coin::new(0, ATOM_DENOM)
 }

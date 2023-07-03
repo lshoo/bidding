@@ -7,7 +7,7 @@ use crate::{
     contract::instantiate,
     execute,
     msg::{ExecuteMsg, HighestOfBidResp, InstantiateMsg, QueryMsg, TotalBidResp, WinnerResp},
-    query, ContractError, ATOM_DENOM, CONTRACT_LABEL,
+    query, ContractError, CONTRACT_LABEL,
 };
 
 pub struct BiddingContract(Addr);
@@ -32,7 +32,8 @@ impl BiddingContract {
         code_id: u64,
         sender: Addr,
         name: &str,
-        tick: u64,
+        tick: u128,
+        commission: u128,
     ) -> StdResult<BiddingContract> {
         app.instantiate_contract(
             code_id,
@@ -40,6 +41,7 @@ impl BiddingContract {
             &InstantiateMsg {
                 name: name.into(),
                 tick,
+                commission,
             },
             &[],
             CONTRACT_LABEL,
@@ -77,9 +79,9 @@ impl BiddingContract {
             .map_err(|e| e.downcast().unwrap())
     }
 
-    pub fn query_total_bid(&self, app: &App) -> Result<TotalBidResp, ContractError> {
+    pub fn query_total_bid(&self, app: &App, addr: String) -> Result<TotalBidResp, ContractError> {
         app.wrap()
-            .query_wasm_smart(self.addr(), &QueryMsg::TotalBid {})
+            .query_wasm_smart(self.addr(), &QueryMsg::TotalBid { addr })
             .map_err(ContractError::Std)
     }
 
@@ -112,12 +114,4 @@ pub fn owner() -> Addr {
 
 pub fn parent() -> Addr {
     Addr::unchecked("inj1g9v8suckezwx93zypckd4xg03r26h6ejlmsptz")
-}
-
-pub fn ten_atom() -> Coin {
-    Coin::new(10, ATOM_DENOM)
-}
-
-pub fn zero_atom() -> Coin {
-    Coin::new(0, ATOM_DENOM)
 }

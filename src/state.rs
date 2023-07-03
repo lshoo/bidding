@@ -4,8 +4,6 @@ use cosmwasm_std::{Addr, Coin};
 use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
 
-use crate::ATOM_DENOM;
-
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct State {
     // contract owner
@@ -13,9 +11,9 @@ pub struct State {
     // bidding name
     pub name: String,
     // bid tick
-    pub tick: u64,
-    // total bid
-    pub total: Coin,
+    pub tick: Coin,
+    // commission
+    pub commission: Coin,
     // bid status, Opening or Closed, default is Opening
     pub status: BidStatus,
     // highest bid
@@ -25,14 +23,14 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(owner: Addr, name: String, tick: u64) -> Self {
+    pub fn new(owner: Addr, name: String, tick: Coin, commission: Coin) -> Self {
         Self {
             owner,
             name,
             tick,
-            total: Coin::new(0, ATOM_DENOM),
-            highest: None,
+            commission,
             status: BidStatus::default(),
+            highest: None,
             winner: None,
         }
     }

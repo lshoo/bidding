@@ -1,9 +1,9 @@
-use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{coin, DepsMut, Env, MessageInfo, Response};
 
 use crate::{
     msg::InstantiateMsg,
     state::{State, STATE},
-    ContractError,
+    ContractError, ATOM_DENOM,
 };
 use cw2::set_contract_version;
 
@@ -19,7 +19,12 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    let state = State::new(info.sender, msg.name, msg.tick);
+    let state = State::new(
+        info.sender,
+        msg.name,
+        coin(msg.tick, ATOM_DENOM),
+        coin(msg.commission, ATOM_DENOM),
+    );
 
     STATE.save(deps.storage, &state)?;
 
@@ -27,7 +32,7 @@ pub fn instantiate(
 }
 
 pub mod exec {
-    use cosmwasm_std::{Addr, BankMsg, Coin, DepsMut, Env, MessageInfo, Response};
+    use cosmwasm_std::{coin, Addr, BankMsg, Coin, DepsMut, Env, MessageInfo, Response};
 
     use crate::{
         helper::{add_coin, collect_coins},
@@ -62,6 +67,8 @@ pub mod exec {
         let bid = BIDDINGS.may_load(deps.storage, sender.clone())?;
 
         let spread = collect_coins(funds, ATOM_DENOM)?;
+
+        validiate_bid(&state, &spread)?;
 
         let current_bid = update_state(&mut state, sender, bid, &spread)?;
 
@@ -117,16 +124,19 @@ pub mod exec {
         receiver: Option<String>,
     ) -> Result<Response, ContractError> {
         let sender = info.sender;
-        
+
         let state = STATE.load(deps.storage)?;
-        
+
         can_retract(&state, &sender)?;
 
         let owner = state.owner;
 
         can_bid(&sender, &owner)?;
 
-        let receiver = &receiver.as_ref().map(Addr::unchecked).unwrap_or(sender.clone());
+        let receiver = &receiver
+            .as_ref()
+            .map(Addr::unchecked)
+            .unwrap_or(sender.clone());
         let bid = BIDDINGS.may_load(deps.storage, receiver.clone())?;
 
         let resp = if let Some(bid) = bid {
@@ -134,7 +144,13 @@ pub mod exec {
                 return Err(ContractError::Unauthorized {});
             }
 
-            let bids = vec![bid];
+            let bids = vec![coin(
+                bid.amount
+                    .checked_sub(state.commission.amount)
+                    .unwrap()
+                    .u128(),
+                ATOM_DENOM,
+            )];
 
             let contract_balances = deps.querier.query_all_balances(env.contract.address)?;
             validiate_balances(&contract_balances, &bids)?;
@@ -147,12 +163,22 @@ pub mod exec {
             Response::new().add_message(bank_msg)
         } else {
             Response::new()
-        }.add_attribute("action", "retract")
-            .add_attribute("sender", sender)
-            .add_attribute("receiver", receiver);
+        }
+        .add_attribute("action", "retract")
+        .add_attribute("sender", sender)
+        .add_attribute("receiver", receiver);
 
         Ok(resp)
+    }
 
+    pub fn validiate_bid(state: &State, spread: &Coin) -> Result<(), ContractError> {
+        if spread.amount < state.tick.amount || spread.amount < state.commission.amount {
+            return Err(ContractError::InvalidBidErr {
+                total_bid: spread.clone(),
+            });
+        }
+
+        Ok(())
     }
 
     pub fn validiate_denom(denom: &[Coin], atom_denom: &str) -> Result<(), ContractError> {
@@ -203,7 +229,10 @@ pub mod exec {
 
     // Owner and winner can't retract
     pub fn can_retract(state: &State, sender: &Addr) -> Result<(), ContractError> {
-        if state.owner == sender || state.winner == Some(sender.clone()) || !state.status.is_closed() {
+        if state.owner == sender
+            || state.winner == Some(sender.clone())
+            || !state.status.is_closed()
+        {
             return Err(ContractError::Unauthorized {});
         }
 
@@ -230,14 +259,12 @@ pub mod exec {
                 bid: current_bid.clone(),
                 bidder: sender.clone(),
             };
-            state.highest = Some(highest);
 
-            let total = add_coin(&state.total, spread)?;
-            state.total = total;
+            state.highest = Some(highest);
 
             Ok(current_bid)
         } else {
-            Err(ContractError::BidTooLow {
+            Err(ContractError::BidTooLowErr {
                 less_than: current_bid,
             })
         }
@@ -245,17 +272,18 @@ pub mod exec {
 }
 
 pub mod query {
-    use cosmwasm_std::{to_binary, Binary, Deps, Env, StdResult};
+    use cosmwasm_std::{coin, to_binary, Addr, Binary, Deps, Env, StdResult};
 
     use crate::{
         msg::{HighestOfBidResp, QueryMsg, TotalBidResp, WinnerResp},
-        state::STATE,
+        state::{BIDDINGS, STATE},
+        ATOM_DENOM,
     };
     use QueryMsg::*;
 
     pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         match msg {
-            TotalBid {} => query_total_bid(deps).and_then(|tb| to_binary(&tb)),
+            TotalBid { addr } => query_total_bid(deps, &addr).and_then(|tb| to_binary(&tb)),
 
             HighestOfBid {} => query_highest_of_bid(deps).and_then(|hb| to_binary(&hb)),
 
@@ -263,9 +291,23 @@ pub mod query {
         }
     }
 
-    pub fn query_total_bid(deps: Deps) -> StdResult<TotalBidResp> {
-        let state = STATE.load(deps.storage)?;
-        Ok(TotalBidResp { total: state.total })
+    pub fn query_total_bid(deps: Deps, sender: &str) -> StdResult<TotalBidResp> {
+        let bid = BIDDINGS.may_load(deps.storage, Addr::unchecked(sender))?;
+
+        if let Some(bid) = bid {
+            let state = STATE.load(deps.storage)?;
+
+            Ok(TotalBidResp {
+                total: coin(
+                    bid.amount.checked_sub(state.commission.amount)?.u128(),
+                    ATOM_DENOM,
+                ),
+            })
+        } else {
+            Ok(TotalBidResp {
+                total: coin(0, ATOM_DENOM),
+            })
+        }
     }
 
     pub fn query_highest_of_bid(deps: Deps) -> StdResult<HighestOfBidResp> {
