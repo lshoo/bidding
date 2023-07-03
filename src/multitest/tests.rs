@@ -148,7 +148,7 @@ fn bid_should_works() {
 }
 
 #[test]
-fn close_bid_should_works() {
+fn close_bid_retract_should_works() {
     let mut app = App::new(|router, _api, storage| {
         router
             .bank
@@ -202,4 +202,15 @@ fn close_bid_should_works() {
 
     let owner_balance = app.wrap().query_balance(owner(), ATOM_DENOM).unwrap();
     assert_eq!(owner_balance, coin(5, ATOM_DENOM));
+
+    // retract funds
+    contract.retract(&mut app, bob(), None).unwrap();
+
+    let bob_balance = app.wrap().query_balance(bob(), ATOM_DENOM).unwrap();
+    assert_eq!(bob_balance, coin(10, ATOM_DENOM));
+
+    let err = contract.retract(&mut app, alice(), None).unwrap_err();
+    assert_eq!(err, ContractError::Unauthorized {});
+
+    // TODO handle commission
 }

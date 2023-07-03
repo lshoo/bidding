@@ -45,7 +45,7 @@ pub mod exec {
         match msg {
             Bidding {} => bid(deps, info),
             Close {} => close(deps, env, info),
-            Retract { receiver } => todo!(),
+            Retract { receiver } => retract(deps, env, info, receiver),
         }
     }
 
@@ -61,7 +61,7 @@ pub mod exec {
         // Update the state if the bidding is valid
         let bid = BIDDINGS.may_load(deps.storage, sender.clone())?;
 
-        let spread = collect_coins(&funds, ATOM_DENOM)?;
+        let spread = collect_coins(funds, ATOM_DENOM)?;
 
         let current_bid = update_state(&mut state, sender, bid, &spread)?;
 
@@ -81,7 +81,7 @@ pub mod exec {
         let sender = info.sender;
         let mut state = STATE.load(deps.storage)?;
 
-        is_owner(&sender, &state.owner)?;
+        validiate_owner(&sender, &state.owner)?;
 
         let highest = state.highest.as_ref();
 
@@ -112,10 +112,47 @@ pub mod exec {
 
     pub fn retract(
         deps: DepsMut,
+        env: Env,
         info: MessageInfo,
         receiver: Option<String>,
     ) -> Result<Response, ContractError> {
-        todo!()
+        let sender = info.sender;
+        
+        let state = STATE.load(deps.storage)?;
+        
+        can_retract(&state, &sender)?;
+
+        let owner = state.owner;
+
+        can_bid(&sender, &owner)?;
+
+        let receiver = &receiver.as_ref().map(Addr::unchecked).unwrap_or(sender.clone());
+        let bid = BIDDINGS.may_load(deps.storage, receiver.clone())?;
+
+        let resp = if let Some(bid) = bid {
+            if bid.amount.is_zero() {
+                return Err(ContractError::Unauthorized {});
+            }
+
+            let bids = vec![bid];
+
+            let contract_balances = deps.querier.query_all_balances(env.contract.address)?;
+            validiate_balances(&contract_balances, &bids)?;
+
+            let bank_msg = BankMsg::Send {
+                to_address: receiver.to_string(),
+                amount: bids,
+            };
+
+            Response::new().add_message(bank_msg)
+        } else {
+            Response::new()
+        }.add_attribute("action", "retract")
+            .add_attribute("sender", sender)
+            .add_attribute("receiver", receiver);
+
+        Ok(resp)
+
     }
 
     pub fn validiate_denom(denom: &[Coin], atom_denom: &str) -> Result<(), ContractError> {
@@ -129,19 +166,23 @@ pub mod exec {
     }
 
     pub fn can_bid(sender: &Addr, owner: &Addr) -> Result<(), ContractError> {
-        if owner == sender {
+        if is_owner(sender, owner) {
             return Err(ContractError::Unauthorized {});
         }
 
         Ok(())
     }
 
-    pub fn is_owner(sender: &Addr, owner: &Addr) -> Result<(), ContractError> {
-        if owner != sender {
+    pub fn validiate_owner(sender: &Addr, owner: &Addr) -> Result<(), ContractError> {
+        if !is_owner(sender, owner) {
             return Err(ContractError::Unauthorized {});
         }
 
         Ok(())
+    }
+
+    pub fn is_owner(sender: &Addr, owner: &Addr) -> bool {
+        owner == sender
     }
 
     pub fn validiate_balances(
@@ -151,7 +192,7 @@ pub mod exec {
         let contract_total = collect_coins(contract_balances, ATOM_DENOM)?;
         let highest_total = collect_coins(highest_coin, ATOM_DENOM)?;
 
-        if contract_total.amount > highest_total.amount {
+        if contract_total.amount >= highest_total.amount {
             Ok(())
         } else {
             Err(ContractError::ContractBalanceInvalidErr {
@@ -159,13 +200,23 @@ pub mod exec {
             })
         }
     }
+
+    // Owner and winner can't retract
+    pub fn can_retract(state: &State, sender: &Addr) -> Result<(), ContractError> {
+        if state.owner == sender || state.winner == Some(sender.clone()) || !state.status.is_closed() {
+            return Err(ContractError::Unauthorized {});
+        }
+
+        Ok(())
+    }
+
     pub fn update_state(
         state: &mut State,
         sender: &Addr,
         bid: Option<Coin>,
         spread: &Coin,
     ) -> Result<Coin, ContractError> {
-        let current_bid = add_coin(&bid.unwrap_or_else(|| Coin::new(0, ATOM_DENOM)), &spread)?;
+        let current_bid = add_coin(&bid.unwrap_or_else(|| Coin::new(0, ATOM_DENOM)), spread)?;
 
         let current_amount = current_bid.amount;
         let highest_amount = state
@@ -181,7 +232,7 @@ pub mod exec {
             };
             state.highest = Some(highest);
 
-            let total = add_coin(&state.total, &spread)?;
+            let total = add_coin(&state.total, spread)?;
             state.total = total;
 
             Ok(current_bid)

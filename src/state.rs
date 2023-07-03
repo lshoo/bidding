@@ -56,6 +56,12 @@ impl Default for BidStatus {
     }
 }
 
+impl BidStatus {
+    pub fn is_closed(&self) -> bool {
+        matches!(self, Self::Closed {})
+    }
+}
+
 // Define the state storage
 pub const STATE: Item<State> = Item::new("state");
 pub const BIDDINGS: Map<Addr, Coin> = Map::new("bids");
