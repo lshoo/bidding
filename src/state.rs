@@ -4,7 +4,7 @@ use cosmwasm_std::{Addr, Coin};
 use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
 
-use crate::DENOM_ATOM;
+use crate::ATOM_DENOM;
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct State {
@@ -30,7 +30,7 @@ impl State {
             owner,
             name,
             tick,
-            total: Coin::new(0, DENOM_ATOM),
+            total: Coin::new(0, ATOM_DENOM),
             highest: None,
             status: BidStatus::default(),
             winner: None,
@@ -58,4 +58,4 @@ impl Default for BidStatus {
 
 // Define the state storage
 pub const STATE: Item<State> = Item::new("state");
-pub const INDIVIDUAL_BIDDING: Map<Addr, u64> = Map::new("bids");
+pub const BIDDINGS: Map<Addr, Coin> = Map::new("bids");

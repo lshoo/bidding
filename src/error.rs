@@ -1,4 +1,4 @@
-use cosmwasm_std::StdError;
+use cosmwasm_std::{Coin, StdError};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -15,9 +15,15 @@ pub enum ContractError {
     #[error("Bid is opening")]
     BidIsOpening {},
 
-    #[error("Bid too low {bid}")]
-    BidTooLow { bid: u64 },
+    #[error("The bid is {less_than} lower than the highest price")]
+    BidTooLow { less_than: Coin },
 
     #[error("No bidder")]
     NoBidder {},
+
+    #[error("Coin not same: {first} = {second}")]
+    CoinOperationErr { first: String, second: String },
+
+    #[error("Coin not supported: {denom}")]
+    CoinUnsupportedErr { denom: String },
 }

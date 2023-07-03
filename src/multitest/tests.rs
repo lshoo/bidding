@@ -1,11 +1,13 @@
+use cosmwasm_std::coin;
 use cw_multi_test::App;
 
 use crate::{
-    multitest::{sender, zero_atom},
-    ContractError,
+    multitest::{alice, owner, zero_atom},
+    state::Bid,
+    ContractError, ATOM_DENOM,
 };
 
-use super::BiddingContract;
+use super::{bob, ten_atom, BiddingContract};
 
 #[test]
 fn query_total_bid_should_works() {
@@ -13,7 +15,7 @@ fn query_total_bid_should_works() {
 
     let code_id = BiddingContract::store_code(&mut app);
 
-    let contract = BiddingContract::instantiate(&mut app, code_id, sender(), "bidding", 2).unwrap();
+    let contract = BiddingContract::instantiate(&mut app, code_id, alice(), "bidding", 2).unwrap();
 
     let resp = contract.query_total_bid(&app).unwrap();
 
@@ -26,7 +28,7 @@ fn query_winner_highest_not_closed_should_works() {
 
     let code_id = BiddingContract::store_code(&mut app);
 
-    let contract = BiddingContract::instantiate(&mut app, code_id, sender(), "bidding", 2).unwrap();
+    let contract = BiddingContract::instantiate(&mut app, code_id, alice(), "bidding", 1).unwrap();
 
     let resp = contract.query_winner(&app).unwrap();
 
@@ -34,4 +36,90 @@ fn query_winner_highest_not_closed_should_works() {
 
     let resp = contract.query_highest_of_bid(&app).unwrap();
     assert_eq!(resp.bid, None);
+}
+
+#[test]
+fn execute_bid_should_works() {
+    let mut app = App::new(|router, _api, storage| {
+        router
+            .bank
+            .init_balance(storage, &alice(), vec![ten_atom()])
+            .unwrap();
+        router
+            .bank
+            .init_balance(storage, &bob(), vec![ten_atom()])
+            .unwrap();
+    });
+
+    let code_id = BiddingContract::store_code(&mut app);
+    let contract = BiddingContract::instantiate(&mut app, code_id, owner(), "bidding", 1).unwrap();
+
+    // alice bid first
+    contract
+        .bid(&mut app, alice(), coin(1, ATOM_DENOM))
+        .unwrap();
+
+    let total_bid = contract.query_total_bid(&app).unwrap();
+    assert_eq!(total_bid.total, coin(1, ATOM_DENOM));
+
+    let highest = contract.query_highest_of_bid(&app).unwrap();
+    assert_eq!(
+        highest.bid,
+        Some(Bid {
+            bid: coin(1, ATOM_DENOM),
+            bidder: alice()
+        })
+    );
+
+    let winner = contract.query_winner(&app).unwrap();
+    assert!(winner.winner.is_none());
+
+    // bob bid second, but fails
+    let err = contract
+        .bid(&mut app, bob(), coin(1, ATOM_DENOM))
+        .unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::BidTooLow {
+            less_than: coin(1, ATOM_DENOM)
+        }
+    );
+
+    // bob bid again
+    contract.bid(&mut app, bob(), coin(2, ATOM_DENOM)).unwrap();
+
+    let total_bid = contract.query_total_bid(&app).unwrap();
+    assert_eq!(total_bid.total, coin(3, ATOM_DENOM));
+
+    let highest = contract.query_highest_of_bid(&app).unwrap();
+    assert_eq!(
+        highest.bid,
+        Some(Bid {
+            bid: coin(2, ATOM_DENOM),
+            bidder: bob()
+        })
+    );
+
+    // bob bid add amount
+    contract.bid(&mut app, bob(), coin(2, ATOM_DENOM)).unwrap();
+
+    let highest = contract.query_highest_of_bid(&app).unwrap();
+    assert_eq!(
+        highest.bid,
+        Some(Bid {
+            bid: coin(4, ATOM_DENOM),
+            bidder: bob()
+        })
+    );
+
+    // alice bid again
+    let err = contract
+        .bid(&mut app, alice(), coin(3, ATOM_DENOM))
+        .unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::BidTooLow {
+            less_than: coin(4, ATOM_DENOM)
+        }
+    );
 }

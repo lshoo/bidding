@@ -1,5 +1,6 @@
 pub mod contract;
 mod error;
+pub mod helper;
 pub mod msg;
 pub mod state;
 
@@ -8,7 +9,7 @@ pub mod multitest;
 
 pub use crate::error::ContractError;
 
-pub const DENOM_ATOM: &str = "ATOM";
+pub const ATOM_DENOM: &str = "ATOM";
 pub const CONTRACT_LABEL: &str = "bidding_label";
 
 #[cfg(not(feature = "library"))]

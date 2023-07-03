@@ -1,13 +1,13 @@
 mod tests;
 
 use cosmwasm_std::{Addr, Coin, StdResult};
-use cw_multi_test::{App, ContractWrapper, Executor};
+use cw_multi_test::{App, AppResponse, ContractWrapper, Executor};
 
 use crate::{
     contract::instantiate,
     execute,
-    msg::{HighestOfBidResp, InstantiateMsg, QueryMsg, TotalBidResp, WinnerResp},
-    query, ContractError, CONTRACT_LABEL, DENOM_ATOM,
+    msg::{ExecuteMsg, HighestOfBidResp, InstantiateMsg, QueryMsg, TotalBidResp, WinnerResp},
+    query, ContractError, ATOM_DENOM, CONTRACT_LABEL,
 };
 
 pub struct BiddingContract(Addr);
@@ -49,10 +49,33 @@ impl BiddingContract {
         .map(BiddingContract)
     }
 
-    // #[track_caller]
-    // pub fn execute(
+    #[track_caller]
+    pub fn bid(
+        &self,
+        app: &mut App,
+        sender: Addr,
+        spread: Coin,
+    ) -> Result<AppResponse, ContractError> {
+        app.execute_contract(sender, self.addr(), &ExecuteMsg::Bidding { spread }, &[])
+            .map_err(|e| e.downcast().unwrap())
+    }
 
-    // )
+    #[track_caller]
+    pub fn close(&self, app: &mut App, sender: Addr) -> Result<AppResponse, ContractError> {
+        app.execute_contract(sender, self.addr(), &ExecuteMsg::Close {}, &[])
+            .map_err(|e| e.downcast().unwrap())
+    }
+
+    #[track_caller]
+    pub fn retract(
+        &self,
+        app: &mut App,
+        sender: Addr,
+        receiver: Option<String>,
+    ) -> Result<AppResponse, ContractError> {
+        app.execute_contract(sender, self.addr(), &ExecuteMsg::Retract { receiver }, &[])
+            .map_err(|e| e.downcast().unwrap())
+    }
 
     pub fn query_total_bid(&self, app: &App) -> Result<TotalBidResp, ContractError> {
         app.wrap()
@@ -71,11 +94,11 @@ impl BiddingContract {
     }
 }
 
-pub fn sender() -> Addr {
+pub fn alice() -> Addr {
     Addr::unchecked("sei18rszd3tmgpjvjwq2qajtmn5jqvtscd2yuygl4z")
 }
 
-pub fn other_sender() -> Addr {
+pub fn bob() -> Addr {
     Addr::unchecked("sei1aan9kqywf4rf274cal0hj6eyly6wu0uv7edxy2")
 }
 
@@ -87,17 +110,17 @@ pub fn parent() -> Addr {
     Addr::unchecked("inj1g9v8suckezwx93zypckd4xg03r26h6ejlmsptz")
 }
 
-// pub fn instantiate_bidding_2() -> InstantiateMsg {
+// pub fn instantiate_bidding_1() -> InstantiateMsg {
 //     InstantiateMsg {
 //         name: "bidding cosmos".to_string(),
-//         tick: 2,
+//         tick: 1,
 //     }
 // }
 
 pub fn ten_atom() -> Coin {
-    Coin::new(10, DENOM_ATOM)
+    Coin::new(10, ATOM_DENOM)
 }
 
 pub fn zero_atom() -> Coin {
-    Coin::new(0, DENOM_ATOM)
+    Coin::new(0, ATOM_DENOM)
 }
