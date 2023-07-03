@@ -25,5 +25,5 @@ pub enum ContractError {
     CoinOperationErr { first: String, second: String },
 
     #[error("Coin not supported: {denom}")]
-    CoinUnsupportedErr { denom: String },
+    CoinSupportedOnlyErr { denom: String },
 }

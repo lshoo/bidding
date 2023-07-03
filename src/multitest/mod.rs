@@ -54,9 +54,9 @@ impl BiddingContract {
         &self,
         app: &mut App,
         sender: Addr,
-        spread: Coin,
+        send_funds: &[Coin],
     ) -> Result<AppResponse, ContractError> {
-        app.execute_contract(sender, self.addr(), &ExecuteMsg::Bidding { spread }, &[])
+        app.execute_contract(sender, self.addr(), &ExecuteMsg::Bidding {}, send_funds)
             .map_err(|e| e.downcast().unwrap())
     }
 
@@ -92,6 +92,10 @@ impl BiddingContract {
         app.wrap()
             .query_wasm_smart(self.addr(), &QueryMsg::HighestOfBid {})
     }
+
+    pub fn query_balance(&self, app: &App, denom: impl Into<String>) -> StdResult<Coin> {
+        app.wrap().query_balance(self.addr(), denom)
+    }
 }
 
 pub fn alice() -> Addr {
@@ -109,13 +113,6 @@ pub fn owner() -> Addr {
 pub fn parent() -> Addr {
     Addr::unchecked("inj1g9v8suckezwx93zypckd4xg03r26h6ejlmsptz")
 }
-
-// pub fn instantiate_bidding_1() -> InstantiateMsg {
-//     InstantiateMsg {
-//         name: "bidding cosmos".to_string(),
-//         tick: 1,
-//     }
-// }
 
 pub fn ten_atom() -> Coin {
     Coin::new(10, ATOM_DENOM)

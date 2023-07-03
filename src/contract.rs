@@ -30,7 +30,7 @@ pub mod exec {
     use cosmwasm_std::{Addr, Coin, DepsMut, Env, MessageInfo, Response};
 
     use crate::{
-        helper::add_coin,
+        helper::{add_coin, collect_coins},
         msg::ExecuteMsg::{self, *},
         state::{Bid, State, BIDDINGS, STATE},
         ContractError, ATOM_DENOM,
@@ -43,22 +43,25 @@ pub mod exec {
         msg: ExecuteMsg,
     ) -> Result<Response, ContractError> {
         match msg {
-            Bidding { spread } => bid(deps, info, spread),
+            Bidding {} => bid(deps, info),
             Close {} => todo!(),
             Retract { receiver } => todo!(),
         }
     }
 
-    pub fn bid(deps: DepsMut, info: MessageInfo, spread: Coin) -> Result<Response, ContractError> {
+    pub fn bid(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
         let sender = &info.sender;
 
-        validiate_denom(spread.denom.as_str(), ATOM_DENOM)?;
+        let funds = &info.funds;
+        validiate_denom(funds, ATOM_DENOM)?;
 
         let mut state = STATE.load(deps.storage)?;
         validiate_sender(sender, &state.owner)?;
 
         // Update the state if the bidding is valid
         let bid = BIDDINGS.may_load(deps.storage, sender.clone())?;
+
+        let spread = collect_coins(&funds, ATOM_DENOM)?;
 
         let current_bid = update_state(&mut state, sender, bid, &spread)?;
 
@@ -86,10 +89,10 @@ pub mod exec {
         todo!()
     }
 
-    pub fn validiate_denom(denom: &str, atom_denom: &str) -> Result<(), ContractError> {
-        if denom != atom_denom {
-            return Err(ContractError::CoinUnsupportedErr {
-                denom: denom.to_string(),
+    pub fn validiate_denom(denom: &[Coin], atom_denom: &str) -> Result<(), ContractError> {
+        if denom.iter().any(|c| c.denom != atom_denom) {
+            return Err(ContractError::CoinSupportedOnlyErr {
+                denom: atom_denom.into(),
             });
         }
 
@@ -110,10 +113,14 @@ pub mod exec {
         bid: Option<Coin>,
         spread: &Coin,
     ) -> Result<Coin, ContractError> {
-        let current_bid = add_coin(&bid.unwrap_or_else(|| Coin::new(0, ATOM_DENOM)), spread)?;
+        let current_bid = add_coin(&bid.unwrap_or_else(|| Coin::new(0, ATOM_DENOM)), &spread)?;
 
         let current_amount = current_bid.amount;
-        let highest_amount = state.highest.as_ref().map(|b| b.bid.amount).unwrap();
+        let highest_amount = state
+            .highest
+            .as_ref()
+            .map(|b| b.bid.amount)
+            .unwrap_or_default();
 
         if current_amount > highest_amount {
             let highest = Bid {
@@ -122,7 +129,7 @@ pub mod exec {
             };
             state.highest = Some(highest);
 
-            let total = add_coin(&state.total, spread)?;
+            let total = add_coin(&state.total, &spread)?;
             state.total = total;
 
             Ok(current_bid)

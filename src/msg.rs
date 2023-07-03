@@ -17,7 +17,7 @@ impl InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    Bidding { spread: Coin },
+    Bidding {},
     Close {},
     Retract { receiver: Option<String> },
 }

@@ -1,4 +1,4 @@
-use cosmwasm_std::coin;
+use cosmwasm_std::{coin, coins};
 use cw_multi_test::App;
 
 use crate::{
@@ -56,7 +56,7 @@ fn execute_bid_should_works() {
 
     // alice bid first
     contract
-        .bid(&mut app, alice(), coin(1, ATOM_DENOM))
+        .bid(&mut app, alice(), &coins(1, ATOM_DENOM))
         .unwrap();
 
     let total_bid = contract.query_total_bid(&app).unwrap();
@@ -76,7 +76,7 @@ fn execute_bid_should_works() {
 
     // bob bid second, but fails
     let err = contract
-        .bid(&mut app, bob(), coin(1, ATOM_DENOM))
+        .bid(&mut app, bob(), &coins(1, ATOM_DENOM))
         .unwrap_err();
     assert_eq!(
         err,
@@ -86,7 +86,9 @@ fn execute_bid_should_works() {
     );
 
     // bob bid again
-    contract.bid(&mut app, bob(), coin(2, ATOM_DENOM)).unwrap();
+    contract
+        .bid(&mut app, bob(), &coins(2, ATOM_DENOM))
+        .unwrap();
 
     let total_bid = contract.query_total_bid(&app).unwrap();
     assert_eq!(total_bid.total, coin(3, ATOM_DENOM));
@@ -101,7 +103,9 @@ fn execute_bid_should_works() {
     );
 
     // bob bid add amount
-    contract.bid(&mut app, bob(), coin(2, ATOM_DENOM)).unwrap();
+    contract
+        .bid(&mut app, bob(), &coins(2, ATOM_DENOM))
+        .unwrap();
 
     let highest = contract.query_highest_of_bid(&app).unwrap();
     assert_eq!(
@@ -114,7 +118,7 @@ fn execute_bid_should_works() {
 
     // alice bid again
     let err = contract
-        .bid(&mut app, alice(), coin(3, ATOM_DENOM))
+        .bid(&mut app, alice(), &coins(3, ATOM_DENOM))
         .unwrap_err();
     assert_eq!(
         err,
@@ -122,4 +126,23 @@ fn execute_bid_should_works() {
             less_than: coin(4, ATOM_DENOM)
         }
     );
+
+    contract
+        .bid(&mut app, alice(), &coins(4, ATOM_DENOM))
+        .unwrap();
+
+    let highest = contract.query_highest_of_bid(&app).unwrap();
+    assert_eq!(
+        highest.bid,
+        Some(Bid {
+            bid: coin(5, ATOM_DENOM),
+            bidder: alice()
+        })
+    );
+
+    let total = contract.query_total_bid(&app).unwrap();
+    assert_eq!(total.total, coin(9, ATOM_DENOM));
+
+    let balance = contract.query_balance(&app, ATOM_DENOM).unwrap();
+    assert_eq!(balance, coin(9, ATOM_DENOM));
 }
