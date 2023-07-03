@@ -3,9 +3,13 @@ mod error;
 pub mod msg;
 pub mod state;
 
+#[cfg(any(test, features = "tests"))]
+pub mod multitest;
+
 pub use crate::error::ContractError;
 
 pub const DENOM_ATOM: &str = "ATOM";
+pub const CONTRACT_LABEL: &str = "bidding_label";
 
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;

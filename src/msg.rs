@@ -1,19 +1,26 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Coin};
 
+use crate::state::Bid;
+
 #[cw_serde]
 pub struct InstantiateMsg {
     pub name: String,
+    pub tick: u64,
 }
 
 impl InstantiateMsg {
-    pub fn new(name: String) -> Self {
-        Self { name }
+    pub fn new(name: String, tick: u64) -> Self {
+        Self { name, tick }
     }
 }
 
 #[cw_serde]
-pub enum ExecuteMsg {}
+pub enum ExecuteMsg {
+    Bid { amount: u64 },
+    Retract { address: Addr },
+    Close {},
+}
 
 #[cw_serde]
 #[derive(QueryResponses)]
@@ -33,11 +40,10 @@ pub struct TotalBidResp {
 
 #[cw_serde]
 pub struct HighestOfBidResp {
-    highest: Coin,
-    bidder: Addr,
+    pub bid: Option<Bid>,
 }
 
 #[cw_serde]
 pub struct WinnerResp {
-    winner: Addr,
+    pub winner: Option<Addr>,
 }

@@ -19,7 +19,7 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    let state = State::new(info.sender, msg.name);
+    let state = State::new(info.sender, msg.name, msg.tick);
 
     STATE.save(deps.storage, &state)?;
 
@@ -37,16 +37,45 @@ pub mod exec {
         _info: MessageInfo,
         _msg: ExecuteMsg,
     ) -> Result<Response, ContractError> {
-        unimplemented!()
+        Ok(Response::new())
     }
 }
 
 pub mod query {
-    use cosmwasm_std::{Binary, Deps, Env, StdResult};
+    use cosmwasm_std::{to_binary, Binary, Deps, Env, StdResult};
 
-    use crate::msg::QueryMsg;
+    use crate::{
+        msg::{HighestOfBidResp, QueryMsg, TotalBidResp, WinnerResp},
+        state::STATE,
+    };
+    use QueryMsg::*;
 
-    pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> StdResult<Binary> {
-        unimplemented!()
+    pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+        match msg {
+            TotalBid {} => query_total_bid(deps).and_then(|tb| to_binary(&tb)),
+
+            HighestOfBid {} => query_highest_of_bid(deps).and_then(|hb| to_binary(&hb)),
+
+            Winner {} => query_winner(deps).and_then(|w| to_binary(&w)),
+        }
+    }
+
+    pub fn query_total_bid(deps: Deps) -> StdResult<TotalBidResp> {
+        let state = STATE.load(deps.storage)?;
+        Ok(TotalBidResp { total: state.total })
+    }
+
+    pub fn query_highest_of_bid(deps: Deps) -> StdResult<HighestOfBidResp> {
+        let state = STATE.load(deps.storage)?;
+
+        Ok(HighestOfBidResp { bid: state.highest })
+    }
+
+    pub fn query_winner(deps: Deps) -> StdResult<WinnerResp> {
+        let state = STATE.load(deps.storage)?;
+
+        Ok(WinnerResp {
+            winner: state.winner,
+        })
     }
 }
