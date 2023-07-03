@@ -27,12 +27,12 @@ pub fn instantiate(
 }
 
 pub mod exec {
-    use cosmwasm_std::{Addr, Coin, DepsMut, Env, MessageInfo, Response};
+    use cosmwasm_std::{Addr, BankMsg, Coin, DepsMut, Env, MessageInfo, Response};
 
     use crate::{
         helper::{add_coin, collect_coins},
         msg::ExecuteMsg::{self, *},
-        state::{Bid, State, BIDDINGS, STATE},
+        state::{Bid, BidStatus, State, BIDDINGS, STATE},
         ContractError, ATOM_DENOM,
     };
 
@@ -44,7 +44,7 @@ pub mod exec {
     ) -> Result<Response, ContractError> {
         match msg {
             Bidding {} => bid(deps, info),
-            Close {} => todo!(),
+            Close {} => close(deps, env, info),
             Retract { receiver } => todo!(),
         }
     }
@@ -56,7 +56,7 @@ pub mod exec {
         validiate_denom(funds, ATOM_DENOM)?;
 
         let mut state = STATE.load(deps.storage)?;
-        validiate_sender(sender, &state.owner)?;
+        can_bid(sender, &state.owner)?;
 
         // Update the state if the bidding is valid
         let bid = BIDDINGS.may_load(deps.storage, sender.clone())?;
@@ -78,7 +78,36 @@ pub mod exec {
     }
 
     pub fn close(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
-        todo!()
+        let sender = info.sender;
+        let mut state = STATE.load(deps.storage)?;
+
+        is_owner(&sender, &state.owner)?;
+
+        let highest = state.highest.as_ref();
+
+        state.status = BidStatus::Closed {};
+        state.winner = highest.map(|bid| bid.bidder.clone());
+
+        let highest_coin: Vec<_> = highest.map(|bid| bid.bid.clone()).into_iter().collect();
+
+        STATE.save(deps.storage, &state)?;
+
+        let contract_balances = deps.querier.query_all_balances(env.contract.address)?;
+
+        validiate_balances(&contract_balances, &highest_coin)?;
+
+        // transfer funds to owner
+        let bank_msg = BankMsg::Send {
+            to_address: sender.to_string(),
+            amount: highest_coin,
+        };
+
+        let resp = Response::new()
+            .add_message(bank_msg)
+            .add_attribute("action", "close")
+            .add_attribute("sender", sender);
+
+        Ok(resp)
     }
 
     pub fn retract(
@@ -99,7 +128,7 @@ pub mod exec {
         Ok(())
     }
 
-    pub fn validiate_sender(sender: &Addr, owner: &Addr) -> Result<(), ContractError> {
+    pub fn can_bid(sender: &Addr, owner: &Addr) -> Result<(), ContractError> {
         if owner == sender {
             return Err(ContractError::Unauthorized {});
         }
@@ -107,6 +136,29 @@ pub mod exec {
         Ok(())
     }
 
+    pub fn is_owner(sender: &Addr, owner: &Addr) -> Result<(), ContractError> {
+        if owner != sender {
+            return Err(ContractError::Unauthorized {});
+        }
+
+        Ok(())
+    }
+
+    pub fn validiate_balances(
+        contract_balances: &[Coin],
+        highest_coin: &[Coin],
+    ) -> Result<(), ContractError> {
+        let contract_total = collect_coins(contract_balances, ATOM_DENOM)?;
+        let highest_total = collect_coins(highest_coin, ATOM_DENOM)?;
+
+        if contract_total.amount > highest_total.amount {
+            Ok(())
+        } else {
+            Err(ContractError::ContractBalanceInvalidErr {
+                amount: contract_total,
+            })
+        }
+    }
     pub fn update_state(
         state: &mut State,
         sender: &Addr,

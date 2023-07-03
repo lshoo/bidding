@@ -26,4 +26,7 @@ pub enum ContractError {
 
     #[error("Coin not supported: {denom}")]
     CoinSupportedOnlyErr { denom: String },
+
+    #[error("Contract balance invalid: {amount}")]
+    ContractBalanceInvalidErr { amount: Coin },
 }

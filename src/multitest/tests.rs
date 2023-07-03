@@ -39,7 +39,7 @@ fn query_winner_highest_not_closed_should_works() {
 }
 
 #[test]
-fn execute_bid_should_works() {
+fn bid_should_works() {
     let mut app = App::new(|router, _api, storage| {
         router
             .bank
@@ -145,4 +145,61 @@ fn execute_bid_should_works() {
 
     let balance = contract.query_balance(&app, ATOM_DENOM).unwrap();
     assert_eq!(balance, coin(9, ATOM_DENOM));
+}
+
+#[test]
+fn close_bid_should_works() {
+    let mut app = App::new(|router, _api, storage| {
+        router
+            .bank
+            .init_balance(storage, &alice(), vec![ten_atom()])
+            .unwrap();
+        router
+            .bank
+            .init_balance(storage, &bob(), vec![ten_atom()])
+            .unwrap();
+    });
+
+    let code_id = BiddingContract::store_code(&mut app);
+    let contract = BiddingContract::instantiate(&mut app, code_id, owner(), "bidding", 1).unwrap();
+
+    // alice bid first
+    contract
+        .bid(&mut app, alice(), &coins(1, ATOM_DENOM))
+        .unwrap();
+
+    // bob bid second
+    contract
+        .bid(&mut app, bob(), &coins(2, ATOM_DENOM))
+        .unwrap();
+
+    // alice bid again
+    contract
+        .bid(&mut app, alice(), &coins(4, ATOM_DENOM))
+        .unwrap();
+
+    let highest = contract.query_highest_of_bid(&app).unwrap();
+    assert_eq!(
+        highest.bid,
+        Some(Bid {
+            bid: coin(5, ATOM_DENOM),
+            bidder: alice()
+        })
+    );
+
+    // check the contract total and balance
+    let total = contract.query_total_bid(&app).unwrap();
+    assert_eq!(total.total, coin(7, ATOM_DENOM));
+
+    let balance = contract.query_balance(&app, ATOM_DENOM).unwrap();
+    assert_eq!(balance, coin(7, ATOM_DENOM));
+
+    // owner close the bid
+    contract.close(&mut app, owner()).unwrap();
+
+    let balance = contract.query_balance(&app, ATOM_DENOM).unwrap();
+    assert_eq!(balance, coin(2, ATOM_DENOM));
+
+    let owner_balance = app.wrap().query_balance(owner(), ATOM_DENOM).unwrap();
+    assert_eq!(owner_balance, coin(5, ATOM_DENOM));
 }
